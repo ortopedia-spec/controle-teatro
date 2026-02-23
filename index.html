@@ -1,0 +1,119 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body{font-family:Arial;margin:0;padding:16px;background:#f5f5f5}
+    .wrap{max-width:520px;margin:0 auto}
+    #reader{width:100%;height:360px;background:#000;border-radius:12px;overflow:hidden}
+    button,input{width:100%;padding:14px;border-radius:12px;border:0;font-size:16px}
+    button{background:#1a73e8;color:#fff;margin-top:10px;cursor:pointer}
+    input{border:2px solid #ddd;background:#fff;margin-top:10px}
+    .card{background:#fff;border-radius:12px;padding:14px;margin-top:12px}
+    .ok{background:#34A853;color:#fff;padding:6px 10px;border-radius:999px;display:inline-block}
+    .bad{background:#EA4335;color:#fff;padding:6px 10px;border-radius:999px;display:inline-block}
+    .tag{display:inline-block;padding:6px 10px;border-radius:999px;background:#eee;margin-top:8px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h2>🎫 Controle Teatro</h2>
+
+  <div id="reader"></div>
+  <button onclick="start()">📷 Iniciar câmera</button>
+
+  <input id="manual" placeholder="Ou cole o ID do QR e Enter" />
+  <button onclick="buscarManual()">🔍 Buscar Manual</button>
+
+  <div class="card" id="out" style="display:none"></div>
+</div>
+
+<script>
+  // COLE AQUI A URL /exec DO SEU APPS SCRIPT
+  const API_URL = "https://script.google.com/macros/s/AKfycbxLuFk9nxioxdCaTo0wy5C2JcLf-2rDZxHdg3F9w0RtGa6VJuR42CfBRwq67GsubDoKIw/exec";
+
+  let scanner = null;
+  let currentId = null;
+
+  async function api(action, payload){
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: {"Content-Type":"text/plain;charset=utf-8"},
+      body: JSON.stringify({action, ...payload})
+    });
+    return await res.json();
+  }
+
+  function show(html){
+    const out = document.getElementById("out");
+    out.style.display = "block";
+    out.innerHTML = html;
+  }
+
+  async function buscar(id){
+    currentId = id;
+    show("🔍 Buscando...");
+    const r = await api("buscar", {id});
+    if (!r.ok) return show(`<span class="bad">Erro</span><p>${r.data?.message || "Falha"}</p>`);
+    if (!r.data) return show(`<span class="bad">Não encontrado</span><p>ID: ${id}</p>`);
+
+    const p = r.data;
+    const confirmado = String(p.status||"").trim().toUpperCase() === "CONFIRMADO";
+    show(`
+      <h3>${p.nome || "---"}</h3>
+      <div class="tag">${confirmado ? "✅ Confirmado" : "⏳ Pendente"}</div>
+      <p><b>Adultos:</b> ${p.adultos} | <b>Crianças:</b> ${p.criancas}</p>
+      <p><b>Tipo:</b> ${p.tipoConvite || "—"}</p>
+      ${String(p.precisaAdaptacao||"").toUpperCase()==="SIM"
+        ? `<p><b>⚠️ Adaptação:</b> ${p.descricaoAdaptacao || p.precisaAdaptacao}</p>`
+        : ""
+      }
+      <button ${confirmado ? "disabled" : ""} onclick="confirmar()">
+        ✅ Confirmar entrada
+      </button>
+    `);
+  }
+
+  async function confirmar(){
+    if (!currentId) return;
+    show("✅ Confirmando...");
+    const r = await api("confirmar", {id: currentId});
+    if (!r.ok) return show(`<span class="bad">Erro</span><p>${r.data?.message || "Falha"}</p>`);
+    await buscar(currentId);
+  }
+
+  function onScan(txt){
+    stop();
+    buscar(String(txt).trim());
+  }
+
+  function start(){
+    if (!scanner) scanner = new Html5Qrcode("reader");
+    scanner.start(
+      { facingMode:"environment" },
+      { fps: 10, qrbox: 250 },
+      onScan,
+      () => {}
+    ).catch(e => show(`<span class="bad">Câmera</span><p>${e.message || e}</p>`));
+  }
+
+  function stop(){
+    if (!scanner) return;
+    scanner.stop().catch(()=>{});
+  }
+
+  function buscarManual(){
+    const id = document.getElementById("manual").value.trim();
+    if (!id) return;
+    stop();
+    buscar(id);
+  }
+
+  document.getElementById("manual").addEventListener("keydown", e => {
+    if (e.key === "Enter") buscarManual();
+  });
+</script>
+</body>
+</html>
