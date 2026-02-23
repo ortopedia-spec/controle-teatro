@@ -261,63 +261,90 @@
       if (resp.success) toast(resp.message || "Confirmado!", "ok");
       else toast(resp.message || "Não confirmado", resp.alreadyConfirmed ? "warn" : "bad");
 
-      // Recarrega os dados
       await buscar(currentId);
     }catch(e){
       show(`<span class="badge b-bad">❌ Rede</span><p>${escapeHtml(e.message || String(e))}</p>`);
     }
   }
 
-  function onScan(txt){
-    if (!scanning) return;
-    scanning = false;
-    stopScanner();
-    buscar(String(txt).trim());
-  }
+  // ========= Scanner (COM await) =========
 
-  function startScanner(){
+  async function startScanner(){
+    if (scanning) return;
+
     if (!scanner) scanner = new Html5Qrcode("reader");
 
-    scanner.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: 250 },
-      onScan,
-      () => {}
-    ).then(()=>{
+    try {
+      await scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 250 },
+        onScan,
+        () => {}
+      );
+
       scanning = true;
       btnStart.disabled = true;
       btnStop.style.display = "block";
       toast("Câmera ativa. Aponte para o QR.", "ok");
-    }).catch(err=>{
-      toast("Falha ao iniciar câmera: " + (err?.message || err), "bad");
-    });
-  }
-
-  function stopScanner(){
-    if (!scanner) return;
-    scanner.stop().catch(()=>{}).finally(()=>{
+    } catch (err) {
+      scanning = false;
       btnStart.disabled = false;
       btnStop.style.display = "none";
+      toast("Falha ao iniciar câmera: " + (err?.message || err), "bad");
+    }
+  }
+
+  async function stopScanner(){
+    if (!scanner) {
       scanning = false;
-    });
+      btnStart.disabled = false;
+      btnStop.style.display = "none";
+      return;
+    }
+
+    try {
+      if (scanning) await scanner.stop();
+    } catch (e) {}
+
+    try {
+      scanner.clear();
+    } catch (e) {}
+
+    scanning = false;
+    btnStart.disabled = false;
+    btnStop.style.display = "none";
   }
 
-  function buscarManual(){
-    stopScanner();
-    const id = String(document.getElementById("manual").value || "").trim();
-    if (!id) return toast("Digite/cole um ID.", "warn");
-    buscar(id);
+  async function onScan(txt){
+    if (!scanning) return;
+
+    // trava antes de qualquer coisa
+    scanning = false;
+
+    // garante parada completa
+    await stopScanner();
+
+    buscar(String(txt).trim());
   }
 
-  function novaLeitura(){
-    stopScanner();
+  async function novaLeitura(){
+    await stopScanner();
 
     currentId = null;
     document.getElementById("manual").value = "";
     out.style.display = "none";
     out.innerHTML = "";
 
-    setTimeout(() => startScanner(), 250);
+    await startScanner();
+  }
+
+  function buscarManual(){
+    // como buscar manual não precisa câmera, só garante que pare
+    stopScanner();
+
+    const id = String(document.getElementById("manual").value || "").trim();
+    if (!id) return toast("Digite/cole um ID.", "warn");
+    buscar(id);
   }
 
   document.getElementById("manual").addEventListener("keydown", (e)=>{
@@ -330,7 +357,6 @@
 
   function formatDateBr(v){
     try{
-      // se vier Date string/ISO
       const d = new Date(v);
       if (isNaN(d.getTime())) return String(v);
       return d.toLocaleString("pt-BR");
