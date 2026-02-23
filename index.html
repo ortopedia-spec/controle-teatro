@@ -311,11 +311,13 @@
 
   function novaLeitura(){
     stopScanner();
+
     currentId = null;
     document.getElementById("manual").value = "";
     out.style.display = "none";
     out.innerHTML = "";
-    toast("Pronto para nova leitura.", "ok");
+
+    setTimeout(() => startScanner(), 250);
   }
 
   document.getElementById("manual").addEventListener("keydown", (e)=>{
