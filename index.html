@@ -128,25 +128,34 @@
     <button id="btnStart" onclick="startScanner()">📷 Iniciar câmera</button>
     <button id="btnStop" class="btn-danger" onclick="stopScanner()" style="display:none;">⏹️ Parar câmera</button>
 
-    <input id="manual" placeholder="Cole o ID do QR e pressione Enter" />
-    <button class="btn-secondary" onclick="buscarManual()">🔍 Buscar Manual</button>
+    <!-- Busca por NOME (autocomplete) -->
+    <input id="nomeInput" list="nomesList" placeholder="Digite o nome para buscar (autocomplete)" />
+    <datalist id="nomesList"></datalist>
+    <button class="btn-secondary" onclick="buscarPorNome()">🔎 Buscar pelo nome</button>
+
+    <!-- Busca por ID ainda disponível (fallback) -->
+    <input id="manualId" placeholder="Ou cole o ID do QR e pressione Enter" />
+    <button class="btn-secondary" onclick="buscarPorId()">🔍 Buscar por ID</button>
 
     <div class="card" id="out" style="display:none"></div>
 
-    <div class="hint">Se o QR não ler, use o campo manual.</div>
+    <div class="hint">Dica: use o campo de nome (mais fácil). Se preferir, use ID.</div>
   </div>
 
 <script>
-  // ✅ Cole aqui a URL /exec do seu Apps Script (Web App)
   const API_URL = "https://script.google.com/macros/s/AKfycbzvIfZgScWrhTqPjLeWq-UP8BtHDLBPEAesMliHIQdKrFKWexDV169jovno9G5GYPSrIg/exec";
 
   let scanner = null;
+  let cameraStarted = false;
+  let scanEnabled = false; // controla se pode aceitar scan (sem desligar câmera)
   let currentId = null;
-  let scanning = false;
 
   const out = document.getElementById("out");
   const btnStart = document.getElementById("btnStart");
   const btnStop = document.getElementById("btnStop");
+
+  // lista de participantes {id,nome}
+  let people = [];
 
   function show(html){
     out.style.display = "block";
@@ -170,6 +179,26 @@
       body: JSON.stringify({ action, ...payload })
     });
     return await res.json();
+  }
+
+  async function carregarLista(){
+    try{
+      const r = await api("listar", {});
+      if (!r.ok) throw new Error(r.data?.message || "Falha ao listar");
+      people = Array.isArray(r.data) ? r.data : [];
+
+      const dl = document.getElementById("nomesList");
+      dl.innerHTML = "";
+      // strategy: value = "Nome | ID" (fácil de extrair)
+      people.forEach(p => {
+        const opt = document.createElement("option");
+        opt.value = `${p.nome} | ${p.id}`;
+        dl.appendChild(opt);
+      });
+
+    }catch(e){
+      toast("Não consegui carregar lista de nomes (OK usar ID).", "warn");
+    }
   }
 
   async function buscar(id){
@@ -267,14 +296,11 @@
     }
   }
 
-  // ========= Scanner (COM await) =========
-
+  // ========= Scanner (mantém câmera ligada) =========
   async function startScanner(){
-    if (scanning) return;
-
     if (!scanner) scanner = new Html5Qrcode("reader");
 
-    try {
+    try{
       await scanner.start(
         { facingMode: "environment" },
         { fps: 10, qrbox: 250 },
@@ -282,73 +308,101 @@
         () => {}
       );
 
-      scanning = true;
+      cameraStarted = true;
+      scanEnabled = true;
       btnStart.disabled = true;
       btnStop.style.display = "block";
       toast("Câmera ativa. Aponte para o QR.", "ok");
-    } catch (err) {
-      scanning = false;
-      btnStart.disabled = false;
-      btnStop.style.display = "none";
+    }catch(err){
       toast("Falha ao iniciar câmera: " + (err?.message || err), "bad");
     }
   }
 
   async function stopScanner(){
-    if (!scanner) {
-      scanning = false;
-      btnStart.disabled = false;
-      btnStop.style.display = "none";
-      return;
-    }
+    if (!scanner || !cameraStarted) return;
 
-    try {
-      if (scanning) await scanner.stop();
-    } catch (e) {}
+    try{ await scanner.stop(); } catch(e){}
+    try{ scanner.clear(); } catch(e){}
 
-    try {
-      scanner.clear();
-    } catch (e) {}
-
-    scanning = false;
+    cameraStarted = false;
+    scanEnabled = false;
     btnStart.disabled = false;
     btnStop.style.display = "none";
+    toast("Câmera parada.", "warn");
   }
 
-  async function onScan(txt){
-    if (!scanning) return;
+  function onScan(txt){
+    if (!scanEnabled) return;
 
-    // trava antes de qualquer coisa
-    scanning = false;
+    // pausa leitura sem desligar câmera
+    scanEnabled = false;
 
-    // garante parada completa
-    await stopScanner();
-
+    // mantém câmera ligada e só processa
     buscar(String(txt).trim());
   }
 
-  async function novaLeitura(){
-    await stopScanner();
-
+  function novaLeitura(){
+    // limpa UI
     currentId = null;
-    document.getElementById("manual").value = "";
+    document.getElementById("manualId").value = "";
+    document.getElementById("nomeInput").value = "";
     out.style.display = "none";
     out.innerHTML = "";
 
-    await startScanner();
+    // reativa leitura imediatamente (sem pedir permissão de novo)
+    if (cameraStarted) {
+      scanEnabled = true;
+      toast("Pronto para nova leitura.", "ok");
+      return;
+    }
+
+    // se ainda não iniciou câmera, inicia agora (gesto direto do botão)
+    startScanner();
   }
 
-  function buscarManual(){
-    // como buscar manual não precisa câmera, só garante que pare
-    stopScanner();
+  // ========= Busca manual =========
+  function extrairIdDeTextoNome(v){
+    // formato: "Nome | ID"
+    const parts = String(v || "").split("|");
+    if (parts.length < 2) return "";
+    return parts[1].trim();
+  }
 
-    const id = String(document.getElementById("manual").value || "").trim();
-    if (!id) return toast("Digite/cole um ID.", "warn");
+  function buscarPorNome(){
+    const v = document.getElementById("nomeInput").value.trim();
+    if (!v) return toast("Digite um nome.", "warn");
+
+    // tenta extrair ID do formato do datalist
+    const id = extrairIdDeTextoNome(v);
+
+    if (id) {
+      scanEnabled = false; // evita scan simultâneo
+      buscar(id);
+      return;
+    }
+
+    // fallback: se usuário digitou só parte do nome, tenta achar primeiro match
+    const found = people.find(p => p.nome.toLowerCase() === v.toLowerCase())
+              || people.find(p => p.nome.toLowerCase().includes(v.toLowerCase()));
+
+    if (!found) return toast("Nome não encontrado. Selecione na lista.", "warn");
+
+    scanEnabled = false;
+    buscar(found.id);
+  }
+
+  function buscarPorId(){
+    const id = document.getElementById("manualId").value.trim();
+    if (!id) return toast("Cole um ID.", "warn");
+    scanEnabled = false;
     buscar(id);
   }
 
-  document.getElementById("manual").addEventListener("keydown", (e)=>{
-    if (e.key === "Enter") buscarManual();
+  document.getElementById("manualId").addEventListener("keydown", (e)=>{
+    if (e.key === "Enter") buscarPorId();
+  });
+  document.getElementById("nomeInput").addEventListener("keydown", (e)=>{
+    if (e.key === "Enter") buscarPorNome();
   });
 
   function escapeHtml(s){
@@ -364,6 +418,9 @@
       return String(v);
     }
   }
+
+  // carrega nomes ao abrir
+  carregarLista();
 </script>
 </body>
 </html>
