@@ -1,119 +1,341 @@
 <!doctype html>
-<html>
+<html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Controle Teatro</title>
+
   <script src="https://unpkg.com/html5-qrcode"></script>
+
   <style>
-    body{font-family:Arial;margin:0;padding:16px;background:#f5f5f5}
+    :root{
+      --primary:#1a73e8;
+      --success:#34A853;
+      --warning:#FBBC05;
+      --danger:#EA4335;
+      --gray:#f5f5f5;
+      --dark:#666;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;padding:16px;background:var(--gray);font-family:Arial, sans-serif}
     .wrap{max-width:520px;margin:0 auto}
-    #reader{width:100%;height:360px;background:#000;border-radius:12px;overflow:hidden}
-    button,input{width:100%;padding:14px;border-radius:12px;border:0;font-size:16px}
-    button{background:#1a73e8;color:#fff;margin-top:10px;cursor:pointer}
-    input{border:2px solid #ddd;background:#fff;margin-top:10px}
-    .card{background:#fff;border-radius:12px;padding:14px;margin-top:12px}
-    .ok{background:#34A853;color:#fff;padding:6px 10px;border-radius:999px;display:inline-block}
-    .bad{background:#EA4335;color:#fff;padding:6px 10px;border-radius:999px;display:inline-block}
-    .tag{display:inline-block;padding:6px 10px;border-radius:999px;background:#eee;margin-top:8px}
+    h2{margin:0 0 12px;text-align:center}
+
+    #reader{
+      width:100%;
+      height:360px;
+      background:#000;
+      border-radius:16px;
+      overflow:hidden;
+    }
+    #reader video{width:100%;height:100%;object-fit:cover}
+
+    button,input{
+      width:100%;
+      padding:14px;
+      border-radius:14px;
+      border:0;
+      font-size:16px;
+    }
+    button{
+      background:var(--primary);
+      color:#fff;
+      margin-top:10px;
+      cursor:pointer;
+      font-weight:600;
+    }
+    button:disabled{opacity:.55;cursor:not-allowed}
+    input{
+      border:2px solid #ddd;
+      background:#fff;
+      margin-top:12px;
+    }
+
+    .card{
+      background:#fff;
+      border-radius:16px;
+      padding:14px;
+      margin-top:12px;
+      box-shadow:0 2px 10px rgba(0,0,0,.08);
+    }
+    .badge{
+      display:inline-block;
+      padding:6px 10px;
+      border-radius:999px;
+      font-weight:700;
+      font-size:13px;
+    }
+    .b-ok{background:rgba(52,168,83,.15);color:var(--success)}
+    .b-warn{background:rgba(251,188,5,.20);color:#7a5a00}
+    .b-bad{background:rgba(234,67,53,.15);color:var(--danger)}
+    .grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+      margin-top:10px;
+    }
+    .mini{
+      background:var(--gray);
+      border-radius:14px;
+      padding:12px;
+      text-align:center;
+    }
+    .mini .lab{font-size:12px;color:var(--dark);margin-bottom:6px}
+    .mini .val{font-size:28px;font-weight:800;color:#222;line-height:1}
+    .row{margin-top:10px}
+    .row .lab{font-size:12px;color:var(--dark);margin-bottom:6px}
+    .row .val{font-size:16px;font-weight:600}
+
+    .box-warn{
+      background:#fff3e0;
+      border-left:4px solid var(--warning);
+      padding:12px;
+      border-radius:14px;
+      margin-top:10px;
+    }
+    .box-ok{
+      background:#e8f5e9;
+      border-left:4px solid var(--success);
+      padding:12px;
+      border-radius:14px;
+      margin-top:10px;
+    }
+
+    .btn-secondary{background:#0f5bd6}
+    .btn-danger{background:var(--danger)}
+    .hint{font-size:12px;color:var(--dark);text-align:center;margin-top:10px}
+
+    .toast{
+      position:fixed;
+      left:16px; right:16px; bottom:16px;
+      padding:14px;
+      border-radius:14px;
+      color:#fff;
+      text-align:center;
+      box-shadow:0 2px 10px rgba(0,0,0,.2);
+      z-index:9999;
+      font-size:15px;
+    }
   </style>
 </head>
+
 <body>
-<div class="wrap">
-  <h2>🎫 Controle Teatro</h2>
+  <div class="wrap">
+    <h2>🎭 Controle Teatro</h2>
 
-  <div id="reader"></div>
-  <button onclick="start()">📷 Iniciar câmera</button>
+    <div id="reader"></div>
 
-  <input id="manual" placeholder="Ou cole o ID do QR e Enter" />
-  <button onclick="buscarManual()">🔍 Buscar Manual</button>
+    <button id="btnStart" onclick="startScanner()">📷 Iniciar câmera</button>
+    <button id="btnStop" class="btn-danger" onclick="stopScanner()" style="display:none;">⏹️ Parar câmera</button>
 
-  <div class="card" id="out" style="display:none"></div>
-</div>
+    <input id="manual" placeholder="Cole o ID do QR e pressione Enter" />
+    <button class="btn-secondary" onclick="buscarManual()">🔍 Buscar Manual</button>
+
+    <div class="card" id="out" style="display:none"></div>
+
+    <div class="hint">Se o QR não ler, use o campo manual.</div>
+  </div>
 
 <script>
-  // COLE AQUI A URL /exec DO SEU APPS SCRIPT
-  const API_URL = "https://script.google.com/macros/s/AKfycbxLuFk9nxioxdCaTo0wy5C2JcLf-2rDZxHdg3F9w0RtGa6VJuR42CfBRwq67GsubDoKIw/exec";
+  // ✅ Cole aqui a URL /exec do seu Apps Script (Web App)
+  const API_URL = "https://script.google.com/macros/s/AKfycbzvIfZgScWrhTqPjLeWq-UP8BtHDLBPEAesMliHIQdKrFKWexDV169jovno9G5GYPSrIg/exec";
 
   let scanner = null;
   let currentId = null;
+  let scanning = false;
 
-  async function api(action, payload){
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: {"Content-Type":"text/plain;charset=utf-8"},
-      body: JSON.stringify({action, ...payload})
-    });
-    return await res.json();
-  }
+  const out = document.getElementById("out");
+  const btnStart = document.getElementById("btnStart");
+  const btnStop = document.getElementById("btnStop");
 
   function show(html){
-    const out = document.getElementById("out");
     out.style.display = "block";
     out.innerHTML = html;
   }
 
+  function toast(msg, type="ok"){
+    const d = document.createElement("div");
+    d.className = "toast";
+    d.style.background = (type==="ok") ? "var(--success)" : (type==="warn") ? "#b07d00" : "var(--danger)";
+    d.textContent = msg;
+    document.body.appendChild(d);
+    setTimeout(()=>{ d.style.opacity="0"; d.style.transition="opacity .4s"; }, 2400);
+    setTimeout(()=>d.remove(), 2900);
+  }
+
+  async function api(action, payload){
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type":"text/plain;charset=utf-8" },
+      body: JSON.stringify({ action, ...payload })
+    });
+    return await res.json();
+  }
+
   async function buscar(id){
     currentId = id;
-    show("🔍 Buscando...");
-    const r = await api("buscar", {id});
-    if (!r.ok) return show(`<span class="bad">Erro</span><p>${r.data?.message || "Falha"}</p>`);
-    if (!r.data) return show(`<span class="bad">Não encontrado</span><p>ID: ${id}</p>`);
+    show(`<span class="badge b-warn">⏳ Buscando...</span>`);
 
-    const p = r.data;
-    const confirmado = String(p.status||"").trim().toUpperCase() === "CONFIRMADO";
-    show(`
-      <h3>${p.nome || "---"}</h3>
-      <div class="tag">${confirmado ? "✅ Confirmado" : "⏳ Pendente"}</div>
-      <p><b>Adultos:</b> ${p.adultos} | <b>Crianças:</b> ${p.criancas}</p>
-      <p><b>Tipo:</b> ${p.tipoConvite || "—"}</p>
-      ${String(p.precisaAdaptacao||"").toUpperCase()==="SIM"
-        ? `<p><b>⚠️ Adaptação:</b> ${p.descricaoAdaptacao || p.precisaAdaptacao}</p>`
-        : ""
+    try{
+      const r = await api("buscar", { id });
+      if (!r.ok) {
+        show(`<span class="badge b-bad">❌ Erro</span><p>${r.data?.message || "Falha"}</p>`);
+        return;
       }
-      <button ${confirmado ? "disabled" : ""} onclick="confirmar()">
-        ✅ Confirmar entrada
-      </button>
+      if (!r.data) {
+        show(`<span class="badge b-bad">Não encontrado</span><p>ID: <b>${escapeHtml(id)}</b></p>`);
+        return;
+      }
+      render(r.data);
+    }catch(e){
+      show(`<span class="badge b-bad">❌ Rede</span><p>${escapeHtml(e.message || String(e))}</p>`);
+    }
+  }
+
+  function render(p){
+    const confirmado = String(p.status||"").trim().toUpperCase() === "CONFIRMADO";
+    const badge = confirmado
+      ? `<span class="badge b-ok">✅ Entrada Confirmada</span>`
+      : `<span class="badge b-warn">⏳ Aguardando Entrada</span>`;
+
+    const precisaAdapt = String(p.precisaAdaptacao||"").trim().toUpperCase() === "SIM";
+    const adaptBox = precisaAdapt
+      ? `<div class="box-warn">
+          <div style="font-weight:800;margin-bottom:6px;">⚠️ Necessidades especiais</div>
+          <div><b>${escapeHtml(p.precisaAdaptacao || "")}</b></div>
+          <div style="margin-top:6px;">${escapeHtml(p.descricaoAdaptacao || "Não especificado")}</div>
+        </div>`
+      : "";
+
+    const confBox = (confirmado && p.dataConfirmacao)
+      ? `<div class="box-ok">
+          <div style="font-weight:800;margin-bottom:6px;">✅ Confirmado em</div>
+          <div>${formatDateBr(p.dataConfirmacao)}</div>
+        </div>`
+      : "";
+
+    const btnConfirm = confirmado
+      ? `<button disabled>✅ Já confirmado</button>`
+      : `<button onclick="confirmar()">✅ Confirmar Entrada</button>`;
+
+    show(`
+      ${badge}
+      <h3 style="margin:10px 0 0;">${escapeHtml(p.nome || "---")}</h3>
+
+      <div class="grid">
+        <div class="mini">
+          <div class="lab">Adultos</div>
+          <div class="val">${Number(p.adultos||0)}</div>
+        </div>
+        <div class="mini">
+          <div class="lab">Crianças</div>
+          <div class="val">${Number(p.criancas||0)}</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="lab">Tipo de Convite</div>
+        <div class="val">${escapeHtml(p.tipoConvite || "Não informado")}</div>
+      </div>
+
+      ${adaptBox}
+      ${confBox}
+
+      ${btnConfirm}
+      <button class="btn-secondary" onclick="novaLeitura()">📱 Nova Leitura</button>
     `);
   }
 
   async function confirmar(){
     if (!currentId) return;
-    show("✅ Confirmando...");
-    const r = await api("confirmar", {id: currentId});
-    if (!r.ok) return show(`<span class="bad">Erro</span><p>${r.data?.message || "Falha"}</p>`);
-    await buscar(currentId);
+    show(`<span class="badge b-warn">⏳ Confirmando...</span>`);
+
+    try{
+      const r = await api("confirmar", { id: currentId });
+      if (!r.ok) {
+        show(`<span class="badge b-bad">❌ Erro</span><p>${r.data?.message || "Falha"}</p>`);
+        return;
+      }
+
+      const resp = r.data;
+      if (resp.success) toast(resp.message || "Confirmado!", "ok");
+      else toast(resp.message || "Não confirmado", resp.alreadyConfirmed ? "warn" : "bad");
+
+      // Recarrega os dados
+      await buscar(currentId);
+    }catch(e){
+      show(`<span class="badge b-bad">❌ Rede</span><p>${escapeHtml(e.message || String(e))}</p>`);
+    }
   }
 
   function onScan(txt){
-    stop();
+    if (!scanning) return;
+    scanning = false;
+    stopScanner();
     buscar(String(txt).trim());
   }
 
-  function start(){
+  function startScanner(){
     if (!scanner) scanner = new Html5Qrcode("reader");
+
     scanner.start(
-      { facingMode:"environment" },
+      { facingMode: "environment" },
       { fps: 10, qrbox: 250 },
       onScan,
       () => {}
-    ).catch(e => show(`<span class="bad">Câmera</span><p>${e.message || e}</p>`));
+    ).then(()=>{
+      scanning = true;
+      btnStart.disabled = true;
+      btnStop.style.display = "block";
+      toast("Câmera ativa. Aponte para o QR.", "ok");
+    }).catch(err=>{
+      toast("Falha ao iniciar câmera: " + (err?.message || err), "bad");
+    });
   }
 
-  function stop(){
+  function stopScanner(){
     if (!scanner) return;
-    scanner.stop().catch(()=>{});
+    scanner.stop().catch(()=>{}).finally(()=>{
+      btnStart.disabled = false;
+      btnStop.style.display = "none";
+      scanning = false;
+    });
   }
 
   function buscarManual(){
-    const id = document.getElementById("manual").value.trim();
-    if (!id) return;
-    stop();
+    stopScanner();
+    const id = String(document.getElementById("manual").value || "").trim();
+    if (!id) return toast("Digite/cole um ID.", "warn");
     buscar(id);
   }
 
-  document.getElementById("manual").addEventListener("keydown", e => {
+  function novaLeitura(){
+    stopScanner();
+    currentId = null;
+    document.getElementById("manual").value = "";
+    out.style.display = "none";
+    out.innerHTML = "";
+    toast("Pronto para nova leitura.", "ok");
+  }
+
+  document.getElementById("manual").addEventListener("keydown", (e)=>{
     if (e.key === "Enter") buscarManual();
   });
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  function formatDateBr(v){
+    try{
+      // se vier Date string/ISO
+      const d = new Date(v);
+      if (isNaN(d.getTime())) return String(v);
+      return d.toLocaleString("pt-BR");
+    }catch{
+      return String(v);
+    }
+  }
 </script>
 </body>
 </html>
