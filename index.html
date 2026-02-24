@@ -116,6 +116,63 @@
       z-index:9999;
       font-size:15px;
     }
+
+    /* ====== Picker (lista suspensa) ====== */
+    .overlay{
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.45);
+      display:none;
+      z-index:9998;
+      padding:16px;
+    }
+    .modal{
+      max-width:520px;
+      margin:40px auto 0;
+      background:#fff;
+      border-radius:16px;
+      overflow:hidden;
+      box-shadow:0 10px 30px rgba(0,0,0,.25);
+    }
+    .modal-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:12px 14px;
+      background:var(--primary);
+      color:#fff;
+      font-weight:700;
+    }
+    .modal-header button{
+      width:auto;
+      padding:8px 12px;
+      margin:0;
+      border-radius:10px;
+      background:rgba(255,255,255,.18);
+    }
+    .modal-body{
+      padding:12px;
+    }
+    .list{
+      max-height:55vh;
+      overflow:auto;
+      margin-top:10px;
+      border:1px solid #eee;
+      border-radius:12px;
+    }
+    .item{
+      padding:12px;
+      border-bottom:1px solid #eee;
+      cursor:pointer;
+    }
+    .item:hover{
+      background:#f7faff;
+    }
+    .small{
+      font-size:12px;
+      color:#777;
+      margin-top:4px;
+    }
   </style>
 </head>
 
@@ -128,34 +185,47 @@
     <button id="btnStart" onclick="startScanner()">📷 Iniciar câmera</button>
     <button id="btnStop" class="btn-danger" onclick="stopScanner()" style="display:none;">⏹️ Parar câmera</button>
 
-    <!-- Busca por NOME (autocomplete) -->
-    <input id="nomeInput" list="nomesList" placeholder="Digite o nome para buscar (autocomplete)" />
-    <datalist id="nomesList"></datalist>
-    <button class="btn-secondary" onclick="buscarPorNome()">🔎 Buscar pelo nome</button>
-
-    <!-- Busca por ID ainda disponível (fallback) -->
-    <input id="manualId" placeholder="Ou cole o ID do QR e pressione Enter" />
-    <button class="btn-secondary" onclick="buscarPorId()">🔍 Buscar por ID</button>
+    <!-- Busca por Nome -->
+    <input id="nomeFiltro" placeholder="Digite um nome para filtrar (opcional)" />
+    <button class="btn-secondary" onclick="abrirPicker()">🔎 Buscar pelo nome</button>
 
     <div class="card" id="out" style="display:none"></div>
 
-    <div class="hint">Dica: use o campo de nome (mais fácil). Se preferir, use ID.</div>
+    <div class="hint">Leitura principal por QR. Se necessário, busque pelo nome.</div>
+  </div>
+
+  <!-- Modal / Lista suspensa -->
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <div>Selecionar convidado</div>
+        <button onclick="fecharPicker()">Fechar</button>
+      </div>
+      <div class="modal-body">
+        <div style="font-size:13px;color:#555;">
+          Dica: o filtro usa <b>contém</b>. Se estiver vazio, mostra todos.
+        </div>
+        <div class="list" id="listaNomes"></div>
+      </div>
+    </div>
   </div>
 
 <script>
+  // ✅ sua URL /exec
   const API_URL = "https://script.google.com/macros/s/AKfycbzvIfZgScWrhTqPjLeWq-UP8BtHDLBPEAesMliHIQdKrFKWexDV169jovno9G5GYPSrIg/exec";
 
   let scanner = null;
   let cameraStarted = false;
-  let scanEnabled = false; // controla se pode aceitar scan (sem desligar câmera)
+  let scanEnabled = false;
   let currentId = null;
 
   const out = document.getElementById("out");
   const btnStart = document.getElementById("btnStart");
-  const btnStop = document.getElementById("btnStop");
+  const btnStop  = document.getElementById("btnStop");
 
-  // lista de participantes {id,nome}
+  // lista cacheada [{id,nome}]
   let people = [];
+  let peopleLoaded = false;
 
   function show(html){
     out.style.display = "block";
@@ -179,26 +249,6 @@
       body: JSON.stringify({ action, ...payload })
     });
     return await res.json();
-  }
-
-  async function carregarLista(){
-    try{
-      const r = await api("listar", {});
-      if (!r.ok) throw new Error(r.data?.message || "Falha ao listar");
-      people = Array.isArray(r.data) ? r.data : [];
-
-      const dl = document.getElementById("nomesList");
-      dl.innerHTML = "";
-      // strategy: value = "Nome | ID" (fácil de extrair)
-      people.forEach(p => {
-        const opt = document.createElement("option");
-        opt.value = `${p.nome} | ${p.id}`;
-        dl.appendChild(opt);
-      });
-
-    }catch(e){
-      toast("Não consegui carregar lista de nomes (OK usar ID).", "warn");
-    }
   }
 
   async function buscar(id){
@@ -277,12 +327,15 @@
 
   async function confirmar(){
     if (!currentId) return;
+
     show(`<span class="badge b-warn">⏳ Confirmando...</span>`);
 
     try{
       const r = await api("confirmar", { id: currentId });
       if (!r.ok) {
-        show(`<span class="badge b-bad">❌ Erro</span><p>${r.data?.message || "Falha"}</p>`);
+        toast(r.data?.message || "Falha ao confirmar", "bad");
+        // mesmo assim volta para nova leitura (pedido seu)
+        novaLeitura();
         return;
       }
 
@@ -290,9 +343,11 @@
       if (resp.success) toast(resp.message || "Confirmado!", "ok");
       else toast(resp.message || "Não confirmado", resp.alreadyConfirmed ? "warn" : "bad");
 
-      await buscar(currentId);
+      // ✅ Pedido 2: após confirmar, limpa e abre para nova leitura
+      novaLeitura();
     }catch(e){
-      show(`<span class="badge b-bad">❌ Rede</span><p>${escapeHtml(e.message || String(e))}</p>`);
+      toast("Erro: " + (e.message || String(e)), "bad");
+      novaLeitura();
     }
   }
 
@@ -337,72 +392,101 @@
     // pausa leitura sem desligar câmera
     scanEnabled = false;
 
-    // mantém câmera ligada e só processa
+    // processa
     buscar(String(txt).trim());
   }
 
   function novaLeitura(){
     // limpa UI
     currentId = null;
-    document.getElementById("manualId").value = "";
-    document.getElementById("nomeInput").value = "";
     out.style.display = "none";
     out.innerHTML = "";
 
-    // reativa leitura imediatamente (sem pedir permissão de novo)
+    // volta a ler imediatamente
     if (cameraStarted) {
       scanEnabled = true;
       toast("Pronto para nova leitura.", "ok");
       return;
     }
-
-    // se ainda não iniciou câmera, inicia agora (gesto direto do botão)
     startScanner();
   }
 
-  // ========= Busca manual =========
-  function extrairIdDeTextoNome(v){
-    // formato: "Nome | ID"
-    const parts = String(v || "").split("|");
-    if (parts.length < 2) return "";
-    return parts[1].trim();
+  // ========= Picker por Nome =========
+  function abrirPicker(){
+    document.getElementById("overlay").style.display = "block";
+    montarLista(); // monta com filtro atual
   }
 
-  function buscarPorNome(){
-    const v = document.getElementById("nomeInput").value.trim();
-    if (!v) return toast("Digite um nome.", "warn");
+  function fecharPicker(){
+    document.getElementById("overlay").style.display = "none";
+  }
 
-    // tenta extrair ID do formato do datalist
-    const id = extrairIdDeTextoNome(v);
+  async function garantirListaCarregada(){
+    if (peopleLoaded) return true;
 
-    if (id) {
-      scanEnabled = false; // evita scan simultâneo
-      buscar(id);
+    try{
+      const r = await api("listar", {});
+      if (!r.ok) throw new Error(r.data?.message || "Falha ao listar");
+      people = Array.isArray(r.data) ? r.data : [];
+      peopleLoaded = true;
+      return true;
+    }catch(e){
+      toast("Não consegui carregar a lista de nomes. Verifique o deploy do WebApp.", "bad");
+      return false;
+    }
+  }
+
+  async function montarLista(){
+    const ok = await garantirListaCarregada();
+    if (!ok) return;
+
+    const filtro = document.getElementById("nomeFiltro").value.trim().toLowerCase();
+    const listEl = document.getElementById("listaNomes");
+    listEl.innerHTML = "";
+
+    const filtrados = filtro
+      ? people.filter(p => (p.nome || "").toLowerCase().includes(filtro))
+      : people;
+
+    if (!filtrados.length){
+      listEl.innerHTML = `<div class="item">Nenhum resultado para: <b>${escapeHtml(filtro)}</b></div>`;
       return;
     }
 
-    // fallback: se usuário digitou só parte do nome, tenta achar primeiro match
-    const found = people.find(p => p.nome.toLowerCase() === v.toLowerCase())
-              || people.find(p => p.nome.toLowerCase().includes(v.toLowerCase()));
+    filtrados.slice(0, 400).forEach(p => {
+      const div = document.createElement("div");
+      div.className = "item";
+      div.innerHTML = `
+        <div><b>${escapeHtml(p.nome)}</b></div>
+        <div class="small">ID: ${escapeHtml(p.id)}</div>
+      `;
+      div.addEventListener("click", () => {
+        fecharPicker();
+        // pausa leitura para não disparar scan simultâneo
+        scanEnabled = false;
+        buscar(p.id);
+      });
+      listEl.appendChild(div);
+    });
 
-    if (!found) return toast("Nome não encontrado. Selecione na lista.", "warn");
-
-    scanEnabled = false;
-    buscar(found.id);
+    if (filtrados.length > 400){
+      const more = document.createElement("div");
+      more.className = "item";
+      more.innerHTML = `<div class="small">Mostrando apenas os primeiros 400 resultados. Refine o filtro.</div>`;
+      listEl.appendChild(more);
+    }
   }
 
-  function buscarPorId(){
-    const id = document.getElementById("manualId").value.trim();
-    if (!id) return toast("Cole um ID.", "warn");
-    scanEnabled = false;
-    buscar(id);
-  }
-
-  document.getElementById("manualId").addEventListener("keydown", (e)=>{
-    if (e.key === "Enter") buscarPorId();
+  // atualiza lista ao digitar (sem ficar chamando backend)
+  document.getElementById("nomeFiltro").addEventListener("input", () => {
+    if (document.getElementById("overlay").style.display === "block") {
+      montarLista();
+    }
   });
-  document.getElementById("nomeInput").addEventListener("keydown", (e)=>{
-    if (e.key === "Enter") buscarPorNome();
+
+  // Enter no filtro já abre a lista filtrada
+  document.getElementById("nomeFiltro").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") abrirPicker();
   });
 
   function escapeHtml(s){
@@ -418,9 +502,6 @@
       return String(v);
     }
   }
-
-  // carrega nomes ao abrir
-  carregarLista();
 </script>
 </body>
 </html>
