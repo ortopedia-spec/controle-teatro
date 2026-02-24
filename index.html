@@ -180,6 +180,14 @@
   <div class="wrap">
     <h2>🎭 Controle Teatro</h2>
 
+    <!-- ✅ NOVO: Campo fixo de nome do participante -->
+    <div class="card" id="cardParticipante">
+      <div class="row" style="margin-top:0;">
+        <div class="lab">Nome do usuário participante da peça</div>
+        <div class="val" id="nomeParticipante">---</div>
+      </div>
+    </div>
+
     <div id="reader"></div>
 
     <button id="btnStart" onclick="startScanner()">📷 Iniciar câmera</button>
@@ -223,6 +231,13 @@
   const btnStart = document.getElementById("btnStart");
   const btnStop  = document.getElementById("btnStop");
 
+  // ✅ NOVO: referência do campo fixo
+  const nomeParticipanteEl = document.getElementById("nomeParticipante");
+  function setNomeParticipante(nome){
+    const v = String(nome || "").trim();
+    nomeParticipanteEl.textContent = v ? v : "---";
+  }
+
   // lista cacheada [{id,nome}]
   let people = [];
   let peopleLoaded = false;
@@ -253,6 +268,10 @@
 
   async function buscar(id){
     currentId = id;
+
+    // ✅ NOVO: enquanto busca, limpa/mostra placeholder
+    setNomeParticipante("---");
+
     show(`<span class="badge b-warn">⏳ Buscando...</span>`);
 
     try{
@@ -272,6 +291,9 @@
   }
 
   function render(p){
+    // ✅ NOVO: atualiza o campo fixo com o nome retornado
+    setNomeParticipante(p.nome);
+
     const confirmado = String(p.status||"").trim().toUpperCase() === "CONFIRMADO";
     const badge = confirmado
       ? `<span class="badge b-ok">✅ Entrada Confirmada</span>`
@@ -397,6 +419,9 @@
   }
 
   function novaLeitura(){
+    // ✅ NOVO: limpa também o nome fixo
+    setNomeParticipante("---");
+
     // limpa UI
     currentId = null;
     out.style.display = "none";
