@@ -464,28 +464,27 @@
     mostrarLoading("Registrando entrada...");
 
     try{
-      const resultado = await api("registrarEntrada", {
+      await api("registrarEntrada", {
         id_qr:String(currentInvite.idQr),
         adultos_entrada:adultos,
         menores_entrada:menores,
         operador:OPERADOR
       });
 
-      currentInvite = resultado.convite;
-      renderConvite(currentInvite);
-      toast("Entrada registrada com sucesso.", "ok");
+      toast("✅ Entrada registrada com sucesso.", "ok");
+      setTimeout(() => novaLeitura(false), 900);
     }catch(error){
       mostrarErro(error.message || String(error));
     }
   }
 
-  function novaLeitura(){
+  function novaLeitura(mostrarAviso = true){
     currentInvite = null;
     out.innerHTML = "";
     out.classList.add("hidden");
     if (cameraStarted){
       scanEnabled = true;
-      toast("Pronto para nova leitura.", "ok");
+      if (mostrarAviso) toast("Pronto para nova leitura.", "ok");
     }
   }
 
