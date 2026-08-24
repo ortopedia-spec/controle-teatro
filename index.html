@@ -240,6 +240,19 @@
   const btnStart = document.getElementById("btnStart");
   const btnStop = document.getElementById("btnStop");
 
+  function toast(msg, type="ok"){
+    const el = document.createElement("div");
+    el.className = "toast";
+    el.style.background = type === "ok" ? "var(--success)" : type === "warn" ? "var(--warning)" : "var(--danger)";
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => {
+      el.style.opacity = "0";
+      el.style.transition = "opacity .35s";
+    }, 2200);
+    setTimeout(() => el.remove(), 2600);
+  }
+
   async function api(action, payload = {}){
     const response = await fetch(API_URL, {
       method: "POST",
@@ -447,8 +460,6 @@
       toast("Informe quantas pessoas estão entrando agora.", "warn");
       return;
     }
-
-    if (!confirm(`Confirmar entrada de ${adultos} adulto(s) e ${menores} menor(es)?`)) return;
 
     mostrarLoading("Registrando entrada...");
 
