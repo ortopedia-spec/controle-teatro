@@ -120,7 +120,30 @@
     .qty-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
     .qty-box{border:1px solid var(--border);border-radius:14px;padding:12px}
     .qty-box label{display:block;font-size:13px;font-weight:700;margin-bottom:7px}
-    .qty-box input{text-align:center;font-size:24px;font-weight:800}
+    .qty-control{display:grid;grid-template-columns:1fr 44px;gap:6px;align-items:stretch}
+    .qty-box input{
+      text-align:center;
+      font-size:28px;
+      font-weight:800;
+      min-height:74px;
+      padding:8px;
+      -moz-appearance:textfield;
+    }
+    .qty-box input::-webkit-outer-spin-button,
+    .qty-box input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+    .qty-stepper{display:grid;grid-template-rows:1fr 1fr;gap:6px}
+    .qty-stepper button{
+      margin:0;
+      min-height:0;
+      height:34px;
+      padding:0;
+      border:1px solid #c6dafc;
+      background:#e8f0fe;
+      color:#174ea6;
+      font-size:18px;
+      line-height:1;
+      border-radius:10px;
+    }
     .qty-help{font-size:11px;color:var(--muted);margin-top:5px;text-align:center}
 
     .hidden{display:none!important}
@@ -169,6 +192,8 @@
       body{padding:10px}
       .grid,.qty-grid{gap:7px}
       .stat .value{font-size:27px}
+      .qty-box{padding:10px}
+      .qty-control{grid-template-columns:1fr 40px;gap:5px}
     }
   </style>
 </head>
@@ -338,6 +363,8 @@
       ? `<div class="info-row"><div class="label">Participante da peça</div><div class="value">${escapeHtml(p.nomeParticipante)}</div></div>`
       : "";
 
+    const saldoAdultos = Number(p.saldoAdultos || 0);
+    const saldoMenores = Number(p.saldoMenores || 0);
     const concluido = status === "CONCLUIDO";
     const formulario = concluido
       ? '<div class="alert success"><b>✅ Convite concluído.</b><br>Não há saldo restante para entrada.</div>'
@@ -346,13 +373,25 @@
         <div class="qty-grid">
           <div class="qty-box">
             <label for="adultosEntrada">Adultos</label>
-            <input id="adultosEntrada" type="number" inputmode="numeric" min="0" max="${Number(p.saldoAdultos||0)}" value="0" />
-            <div class="qty-help">Máximo: ${Number(p.saldoAdultos||0)}</div>
+            <div class="qty-control">
+              <input id="adultosEntrada" type="number" inputmode="numeric" min="0" max="${saldoAdultos}" value="${saldoAdultos}" onfocus="this.select()" />
+              <div class="qty-stepper">
+                <button type="button" aria-label="Aumentar adultos" onclick="ajustarQuantidade('adultosEntrada',1)" ${saldoAdultos <= 0 ? 'disabled' : ''}>▲</button>
+                <button type="button" aria-label="Diminuir adultos" onclick="ajustarQuantidade('adultosEntrada',-1)" ${saldoAdultos <= 0 ? 'disabled' : ''}>▼</button>
+              </div>
+            </div>
+            <div class="qty-help">Máximo: ${saldoAdultos}</div>
           </div>
           <div class="qty-box">
             <label for="menoresEntrada">Menores</label>
-            <input id="menoresEntrada" type="number" inputmode="numeric" min="0" max="${Number(p.saldoMenores||0)}" value="0" />
-            <div class="qty-help">Máximo: ${Number(p.saldoMenores||0)}</div>
+            <div class="qty-control">
+              <input id="menoresEntrada" type="number" inputmode="numeric" min="0" max="${saldoMenores}" value="${saldoMenores}" onfocus="this.select()" />
+              <div class="qty-stepper">
+                <button type="button" aria-label="Aumentar menores" onclick="ajustarQuantidade('menoresEntrada',1)" ${saldoMenores <= 0 ? 'disabled' : ''}>▲</button>
+                <button type="button" aria-label="Diminuir menores" onclick="ajustarQuantidade('menoresEntrada',-1)" ${saldoMenores <= 0 ? 'disabled' : ''}>▼</button>
+              </div>
+            </div>
+            <div class="qty-help">Máximo: ${saldoMenores}</div>
           </div>
         </div>
         <button onclick="confirmarEntrada()">✅ Confirmar entrada</button>
@@ -369,12 +408,12 @@
       <div class="grid">
         <div class="stat">
           <div class="label">Saldo adultos</div>
-          <div class="value">${Number(p.saldoAdultos||0)}</div>
+          <div class="value">${saldoAdultos}</div>
           <div class="small">de ${Number(p.adultosTotal||0)} autorizados</div>
         </div>
         <div class="stat">
           <div class="label">Saldo menores</div>
-          <div class="value">${Number(p.saldoMenores||0)}</div>
+          <div class="value">${saldoMenores}</div>
           <div class="small">de ${Number(p.menoresTotal||0)} autorizados</div>
         </div>
       </div>
@@ -385,6 +424,17 @@
       ${formulario}
       <button class="light" onclick="novaLeitura()">↩️ Nova leitura</button>
     `;
+  }
+
+  function ajustarQuantidade(id, delta){
+    const input = document.getElementById(id);
+    if (!input) return;
+
+    const min = Number(input.min || 0);
+    const max = Number(input.max || 0);
+    const atual = Number.parseInt(input.value, 10);
+    const base = Number.isFinite(atual) ? atual : 0;
+    input.value = clampInt(base + delta, min, max);
   }
 
   async function confirmarEntrada(){
