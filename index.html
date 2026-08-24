@@ -160,6 +160,7 @@
   </div>
 
 <script>
+  const APP_VERSION = "2026.08.24.1";
   const API_URL = "https://script.google.com/macros/s/AKfycbyKVUbI8fsHE1ceIttS6XuBF9RQz8tJPUw0Y0Njgn-EDwk1D5OA1GkWDmunDqvr_LBoag/exec";
   const OPERADOR_STORAGE_KEY = "controle_teatro_operador_v1";
 
@@ -175,6 +176,28 @@
   const operatorName = document.getElementById("operatorName");
   const operatorOverlay = document.getElementById("operatorOverlay");
   const operatorInput = document.getElementById("operatorInput");
+
+  async function verificarAtualizacao(){
+    try{
+      const response = await fetch(`version.json?t=${Date.now()}`, {cache:"no-store"});
+      if (!response.ok) return true;
+
+      const info = await response.json();
+      const versaoPublicada = String(info.version || "").trim();
+
+      if (versaoPublicada && versaoPublicada !== APP_VERSION){
+        const url = new URL(window.location.href);
+        if (url.searchParams.get("v") !== versaoPublicada){
+          url.searchParams.set("v", versaoPublicada);
+          window.location.replace(url.toString());
+          return false;
+        }
+      }
+    }catch(e){
+      // Se a verificação falhar, o sistema continua funcionando normalmente.
+    }
+    return true;
+  }
 
   function inicializarOperador(){
     const salvo = String(localStorage.getItem(OPERADOR_STORAGE_KEY) || "").trim();
@@ -501,7 +524,9 @@
     if (e.key === "Enter") buscarManual();
   });
 
-  inicializarOperador();
+  verificarAtualizacao().then(ok => {
+    if (ok) inicializarOperador();
+  });
 </script>
 </body>
 </html>
