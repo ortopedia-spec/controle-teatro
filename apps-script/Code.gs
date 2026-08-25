@@ -8,6 +8,7 @@
  * - buscarConvite: localiza um convite pelo ID_QR.
  * - buscarConvites: busca manual por nome ou telefone.
  * - registrarEntrada: registra entradas parciais de adultos e menores.
+ * - statusEntrada: retorna totais agregados de reservas, entradas e ocupação.
  * - inicializarControleEntradas: preenche saldos/status iniciais na planilha.
  *
  * O ID_QR é sempre tratado como texto para evitar perda de precisão.
@@ -24,7 +25,7 @@ function doGet(e) {
         data: {
           status: 'online',
           projeto: 'controle-entrada-teatro',
-          versao: '1.0',
+          versao: '1.1',
           dataHora: new Date().toISOString()
         }
       });
@@ -52,7 +53,7 @@ function doPost(e) {
         ok: true,
         data: {
           status: 'online',
-          versao: '1.0',
+          versao: '1.1',
           dataHora: new Date().toISOString()
         }
       });
@@ -76,6 +77,13 @@ function doPost(e) {
       });
     }
 
+    if (action === 'statusentrada' || action === 'ocupacao') {
+      return respostaJson_({
+        ok: true,
+        data: obterStatusEntrada_()
+      });
+    }
+
     if (action === 'registrarentrada' || action === 'confirmar') {
       return respostaJson_({
         ok: true,
@@ -95,10 +103,6 @@ function doPost(e) {
   }
 }
 
-/**
- * Executar manualmente uma única vez após criar o projeto.
- * Preenche QTD_ENTRADA_*, SALDO_* e STATUS_ENTRADA nas linhas existentes.
- */
 function inicializarControleEntradas() {
   const lock = LockService.getScriptLock();
   lock.waitLock(CONFIG.LOCK_TIMEOUT_MS);
