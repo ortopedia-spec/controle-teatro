@@ -28,7 +28,7 @@
     h1{font-size:23px;text-align:center;margin:4px 0 2px}
     .subtitle{text-align:center;color:var(--muted);font-size:13px;margin-bottom:8px}
 
-    .operator-bar{display:flex;justify-content:center;align-items:center;gap:8px;margin:0 0 12px;color:var(--muted);font-size:12px}
+    .operator-bar{display:flex;justify-content:center;align-items:center;gap:8px;margin:0 0 12px;color:var(--muted);font-size:12px;flex-wrap:wrap}
     .operator-bar strong{color:var(--text)}
     .operator-bar button{width:auto;min-height:30px;margin:0;padding:5px 9px;border-radius:8px;background:#e8f0fe;color:#174ea6;font-size:11px}
 
@@ -160,7 +160,7 @@
   </div>
 
 <script>
-  const APP_VERSION = "2026.08.24.1";
+  const APP_VERSION = "2026.08.25.1";
   const API_URL = "https://script.google.com/macros/s/AKfycbyKVUbI8fsHE1ceIttS6XuBF9RQz8tJPUw0Y0Njgn-EDwk1D5OA1GkWDmunDqvr_LBoag/exec";
   const OPERADOR_STORAGE_KEY = "controle_teatro_operador_v1";
 
@@ -528,5 +528,6 @@
     if (ok) inicializarOperador();
   });
 </script>
+<script src="status-panel.js?v=2026.08.25.1"></script>
 </body>
 </html>
